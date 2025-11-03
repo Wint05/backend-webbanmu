@@ -32,6 +32,7 @@ public interface HoaDonChiTietRepository extends JpaRepository<HoaDonChiTiet, Lo
            "JOIN FETCH hdct.hoaDon hd " +
            "JOIN FETCH hdct.chiTietSanPham ctsp " +
            "LEFT JOIN FETCH ctsp.sanPham sp " +
+           "LEFT JOIN FETCH sp.nhaSanXuat nsx " +
            "LEFT JOIN FETCH ctsp.mauSac ms " +
            "LEFT JOIN FETCH sp.kieuDangMu kdm " +
            "WHERE hd.trangThai != com.example.backend.entity.HoaDon$TrangThaiHoaDon.DA_HUY " +

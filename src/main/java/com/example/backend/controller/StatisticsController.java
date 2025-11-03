@@ -1,6 +1,10 @@
 package com.example.backend.controller;
 
 import com.example.backend.dto.BestSellingProductDTO;
+import com.example.backend.dto.BrandStatisticsDTO;
+import com.example.backend.dto.ChannelStatisticsDTO;
+import com.example.backend.dto.LowStockProductDTO;
+import com.example.backend.dto.OrderStatusStatisticsDTO;
 import com.example.backend.dto.PeriodStatisticsDTO;
 import com.example.backend.dto.WeeklyRevenueDTO;
 import com.example.backend.entity.HoaDonChiTiet;
@@ -71,6 +75,17 @@ public class StatisticsController {
         ));
     }
     
+    // Endpoint test để kiểm tra top-brands có được register không
+    @GetMapping("/test-top-brands")
+    public ResponseEntity<?> testTopBrands() {
+        return ResponseEntity.ok(Map.of(
+            "status", "OK",
+            "message", "Top brands endpoint is accessible",
+            "endpoint", "/api/statistics/top-brands?limit=3",
+            "timestamp", System.currentTimeMillis()
+        ));
+    }
+    
     // Endpoint test để kiểm tra period endpoint có được register không
     @GetMapping("/period-test")
     public ResponseEntity<?> periodTest() {
@@ -137,8 +152,8 @@ public class StatisticsController {
     }
     
     /**
-     * Lấy thống kê theo khoảng thời gian (ngày, tuần, tháng, năm)
-     * @param period Loại khoảng thời gian: "day", "week", "month", "year"
+     * Lấy thống kê theo khoảng thời gian (ngày, tuần, tháng, năm, all)
+     * @param period Loại khoảng thời gian: "day", "week", "month", "year", "all"
      * @return PeriodStatisticsDTO chứa doanh thu, số sản phẩm đã bán, số đơn hàng
      */
     @GetMapping("/period")
@@ -149,7 +164,14 @@ public class StatisticsController {
             System.out.println("📥 [StatisticsController] Received GET request: /api/statistics/period?period=" + period);
             System.out.println("========================================");
             
-            PeriodStatisticsDTO statistics = statisticsService.getPeriodStatistics(period);
+            PeriodStatisticsDTO statistics;
+            
+            // Nếu period là "all", lấy tổng tất cả hóa đơn
+            if ("all".equalsIgnoreCase(period)) {
+                statistics = statisticsService.getTotalStatistics();
+            } else {
+                statistics = statisticsService.getPeriodStatistics(period);
+            }
             
             System.out.println("✅ [StatisticsController] Successfully returning period statistics");
             System.out.println("   - Period: " + statistics.getPeriod());
@@ -169,6 +191,43 @@ public class StatisticsController {
             
             Map<String, Object> errorResponse = new HashMap<>();
             errorResponse.put("error", "Lỗi khi lấy thống kê theo khoảng thời gian: " + e.getMessage());
+            errorResponse.put("message", e.getMessage());
+            return ResponseEntity.status(500).body(errorResponse);
+        }
+    }
+    
+    /**
+     * Lấy tổng số đơn hàng và tổng doanh thu của tất cả các hóa đơn
+     * Logic:
+     * - Số đơn hàng: Tổng số hóa đơn trong bảng hoa_don
+     * - Tổng doanh thu: Tổng thành tiền (thanhTien) của tất cả các hóa đơn
+     * @return PeriodStatisticsDTO chứa tổng số đơn hàng và tổng doanh thu
+     */
+    @GetMapping("/total")
+    public ResponseEntity<?> getTotalStatistics() {
+        try {
+            System.out.println("========================================");
+            System.out.println("📥 [StatisticsController] Received GET request: /api/statistics/total");
+            System.out.println("========================================");
+            
+            PeriodStatisticsDTO statistics = statisticsService.getTotalStatistics();
+            
+            System.out.println("✅ [StatisticsController] Successfully returning total statistics");
+            System.out.println("   - Tổng số đơn hàng: " + statistics.getDonHang());
+            System.out.println("   - Tổng doanh thu: " + statistics.getDoanhThu());
+            System.out.println("========================================");
+            
+            return ResponseEntity.ok(statistics);
+        } catch (Exception e) {
+            System.err.println("========================================");
+            System.err.println("❌ [StatisticsController] ERROR occurred:");
+            System.err.println("   Message: " + e.getMessage());
+            System.err.println("   Cause: " + (e.getCause() != null ? e.getCause().getMessage() : "N/A"));
+            System.err.println("========================================");
+            e.printStackTrace();
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Lỗi khi lấy tổng thống kê: " + e.getMessage());
             errorResponse.put("message", e.getMessage());
             return ResponseEntity.status(500).body(errorResponse);
         }
@@ -237,6 +296,192 @@ public class StatisticsController {
             errorResponse.put("error", "Lỗi khi lấy thống kê doanh thu theo tuần: " + e.getMessage());
             errorResponse.put("message", e.getMessage());
             errorResponse.put("data", List.of());
+            return ResponseEntity.status(500).body(errorResponse);
+        }
+    }
+    
+    /**
+     * Lấy top 3 nhà sản xuất bán chạy nhất dựa trên tổng số lượng mua
+     * @param limit Số lượng nhà sản xuất muốn lấy (mặc định 3)
+     * @return Danh sách BrandStatisticsDTO
+     */
+    @GetMapping("/top-brands")
+    public ResponseEntity<?> getTopBrands(
+            @RequestParam(defaultValue = "3") int limit) {
+        try {
+            System.out.println("========================================");
+            System.out.println("📥 [StatisticsController] Received GET request: /api/statistics/top-brands?limit=" + limit);
+            System.out.println("========================================");
+            
+            List<BrandStatisticsDTO> brands = statisticsService.getTopBrandsByPurchaseCount(limit);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("data", brands);
+            response.put("total", brands.size());
+            
+            System.out.println("✅ [StatisticsController] Successfully returning " + brands.size() + " brands");
+            System.out.println("========================================");
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.err.println("========================================");
+            System.err.println("❌ [StatisticsController] ERROR occurred:");
+            System.err.println("   Message: " + e.getMessage());
+            System.err.println("   Cause: " + (e.getCause() != null ? e.getCause().getMessage() : "N/A"));
+            System.err.println("========================================");
+            e.printStackTrace();
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Lỗi khi lấy danh sách hãng bán chạy: " + e.getMessage());
+            errorResponse.put("data", List.of());
+            errorResponse.put("message", e.getMessage());
+            return ResponseEntity.status(500).body(errorResponse);
+        }
+    }
+    
+    /**
+     * Test endpoint để kiểm tra order-status API có hoạt động không
+     */
+    @GetMapping("/test-order-status")
+    public ResponseEntity<?> testOrderStatusEndpoint() {
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Order Status endpoint is working!");
+        response.put("endpoint", "/api/statistics/order-status");
+        response.put("timestamp", System.currentTimeMillis());
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * Lấy thống kê số lượng đơn hàng theo từng trạng thái trong khoảng thời gian
+     * @param period Loại khoảng thời gian: "day", "week", "month", "year"
+     * @return Danh sách OrderStatusStatisticsDTO
+     */
+    @GetMapping("/order-status")
+    public ResponseEntity<?> getOrderStatusStatistics(
+            @RequestParam(defaultValue = "month") String period) {
+        try {
+            System.out.println("========================================");
+            System.out.println("📥 [StatisticsController] Received GET request: /api/statistics/order-status?period=" + period);
+            System.out.println("========================================");
+            
+            if (statisticsService == null) {
+                System.err.println("❌ [StatisticsController] statisticsService is NULL!");
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "StatisticsService is not initialized");
+                errorResponse.put("data", List.of());
+                return ResponseEntity.status(500).body(errorResponse);
+            }
+            
+            List<OrderStatusStatisticsDTO> statistics = statisticsService.getOrderStatusStatistics(period);
+            
+            if (statistics == null) {
+                System.err.println("❌ [StatisticsController] statistics is NULL!");
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "Statistics data is null");
+                errorResponse.put("data", List.of());
+                return ResponseEntity.status(500).body(errorResponse);
+            }
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("data", statistics);
+            response.put("total", statistics.stream().mapToLong(OrderStatusStatisticsDTO::getCount).sum());
+            response.put("period", period);
+            
+            System.out.println("✅ [StatisticsController] Successfully returning " + statistics.size() + " status statistics");
+            System.out.println("========================================");
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.err.println("========================================");
+            System.err.println("❌ [StatisticsController] ERROR occurred:");
+            System.err.println("   Message: " + e.getMessage());
+            System.err.println("   Cause: " + (e.getCause() != null ? e.getCause().getMessage() : "N/A"));
+            System.err.println("========================================");
+            e.printStackTrace();
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Lỗi khi lấy thống kê trạng thái đơn hàng: " + e.getMessage());
+            errorResponse.put("data", List.of());
+            errorResponse.put("message", e.getMessage());
+            return ResponseEntity.status(500).body(errorResponse);
+        }
+    }
+    
+    /**
+     * Lấy thống kê phân phối đa kênh (Online và Tại quầy)
+     * @return Danh sách ChannelStatisticsDTO
+     */
+    @GetMapping("/channels")
+    public ResponseEntity<?> getChannelStatistics() {
+        try {
+            System.out.println("========================================");
+            System.out.println("📥 [StatisticsController] Received GET request: /api/statistics/channels");
+            System.out.println("========================================");
+            
+            List<ChannelStatisticsDTO> statistics = statisticsService.getChannelStatistics();
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("data", statistics);
+            response.put("total", statistics.stream().mapToLong(ChannelStatisticsDTO::getCount).sum());
+            
+            System.out.println("✅ [StatisticsController] Successfully returning " + statistics.size() + " channel statistics");
+            System.out.println("========================================");
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.err.println("========================================");
+            System.err.println("❌ [StatisticsController] ERROR occurred:");
+            System.err.println("   Message: " + e.getMessage());
+            System.err.println("   Cause: " + (e.getCause() != null ? e.getCause().getMessage() : "N/A"));
+            System.err.println("========================================");
+            e.printStackTrace();
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Lỗi khi lấy thống kê phân phối đa kênh: " + e.getMessage());
+            errorResponse.put("data", List.of());
+            errorResponse.put("message", e.getMessage());
+            return ResponseEntity.status(500).body(errorResponse);
+        }
+    }
+    
+    /**
+     * Lấy danh sách sản phẩm sắp hết hàng dựa trên số lượng tồn kho
+     * @param threshold Ngưỡng số lượng (mặc định 5) - sản phẩm có số lượng <= threshold sẽ được lấy
+     * @param limit Số lượng sản phẩm tối đa muốn lấy (mặc định 10)
+     * @return Danh sách LowStockProductDTO
+     */
+    @GetMapping("/low-stock-products")
+    public ResponseEntity<?> getLowStockProducts(
+            @RequestParam(required = false, defaultValue = "5") Integer threshold,
+            @RequestParam(required = false, defaultValue = "10") Integer limit) {
+        try {
+            System.out.println("========================================");
+            System.out.println("📥 [StatisticsController] Received GET request: /api/statistics/low-stock-products?threshold=" + threshold + "&limit=" + limit);
+            System.out.println("========================================");
+            
+            List<LowStockProductDTO> products = statisticsService.getLowStockProducts(threshold, limit);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("data", products);
+            response.put("total", products.size());
+            response.put("threshold", threshold);
+            
+            System.out.println("✅ [StatisticsController] Successfully returning " + products.size() + " low stock products");
+            System.out.println("========================================");
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.err.println("========================================");
+            System.err.println("❌ [StatisticsController] ERROR occurred:");
+            System.err.println("   Message: " + e.getMessage());
+            System.err.println("   Cause: " + (e.getCause() != null ? e.getCause().getMessage() : "N/A"));
+            System.err.println("========================================");
+            e.printStackTrace();
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Lỗi khi lấy danh sách sản phẩm sắp hết hàng: " + e.getMessage());
+            errorResponse.put("data", List.of());
+            errorResponse.put("message", e.getMessage());
             return ResponseEntity.status(500).body(errorResponse);
         }
     }
